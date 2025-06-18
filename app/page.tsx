@@ -35,7 +35,7 @@ interface UserInput {
   description: string
   github?: string
   twitter?: string
-  linkedin?: string
+  linkedin: string
   youtube?: string
   role?: string
   companyWebsite?: string
@@ -47,6 +47,7 @@ export default function AutoResumePage() {
   const [userInput, setUserInput] = useState<UserInput>({
     name: "",
     description: "",
+    linkedin: "",
     jobs: [],
   })
   const [newJob, setNewJob] = useState<Partial<JobEntry>>({})
@@ -118,8 +119,11 @@ export default function AutoResumePage() {
         body: JSON.stringify(userInput),
       })
       if (res.ok) {
-        const data: ContentItem[] = await res.json()
-        setContentItems(data)
+        const data: { items: ContentItem[]; jobs: JobEntry[] } = await res.json()
+        setContentItems(data.items)
+        if (data.jobs && data.jobs.length > 0) {
+          setUserInput((prev) => ({ ...prev, jobs: data.jobs }))
+        }
       } else {
         setContentItems([])
       }
@@ -182,10 +186,10 @@ export default function AutoResumePage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="linkedin">LinkedIn (optional)</Label>
+                  <Label htmlFor="linkedin">LinkedIn *</Label>
                   <Input
                     id="linkedin"
-                    value={userInput.linkedin || ""}
+                    value={userInput.linkedin}
                     onChange={(e) => setUserInput((prev) => ({ ...prev, linkedin: e.target.value }))}
                     placeholder="linkedin.com/in/janedoe"
                   />
@@ -257,7 +261,7 @@ export default function AutoResumePage() {
               <Button
                 onClick={handleGenerate}
                 className="w-full"
-                disabled={!userInput.name || !userInput.description || !userInput.role || !userInput.companyWebsite}
+                disabled={!userInput.name || !userInput.description || !userInput.role || !userInput.companyWebsite || !userInput.linkedin}
               >
                 <Search className="h-4 w-4 mr-2" />
                 Generate Resume
