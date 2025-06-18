@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 
 interface JobEntry {
   id: string;
@@ -14,7 +15,7 @@ interface UserInput {
   description: string;
   github?: string;
   twitter?: string;
-  linkedin?: string;
+  linkedin: string;
   youtube?: string;
   role?: string;
   companyWebsite?: string;
@@ -35,6 +36,41 @@ function detectTypeFromUrl(url: string): ContentItem["type"] {
   if (url.includes("github.com")) return "github";
   if (url.includes("youtube.com") || url.includes("youtu.be")) return "video";
   return "blog";
+}
+
+function parseLinkedInExperience(text: string): JobEntry[] {
+  const jobs: JobEntry[] = [];
+  const regex = /([A-Za-z0-9 ,.&()\/-]+) at ([A-Za-z0-9 ,.&()\/-]+)\s+(\w+ \d{4})\s*[\u2013\-]\s*(Present|\w+ \d{4})/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text))) {
+    jobs.push({
+      id: randomUUID(),
+      title: match[1].trim(),
+      company: match[2].trim(),
+      startDate: match[3].trim(),
+      endDate: match[4].trim(),
+    });
+  }
+  return jobs;
+}
+
+async function fetchLinkedInJobs(url: string, token: string): Promise<JobEntry[]> {
+  try {
+    const res = await fetch("https://api.exa.ai/webcrawl", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ url }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const text = data.text || data.content || "";
+    return parseLinkedInExperience(text);
+  } catch {
+    return [];
+  }
 }
 
 export async function POST(req: Request) {
@@ -60,7 +96,7 @@ export async function POST(req: Request) {
 
     if (!searchRes.ok) {
       const text = await searchRes.text();
-      return NextResponse.json({ error: text }, { status: searchRes.status });
+      return NextResponse.json({ items: [], jobs: [], error: text }, { status: searchRes.status });
     }
 
     const data = await searchRes.json();
@@ -74,8 +110,10 @@ export async function POST(req: Request) {
       confidence: r.score ?? r.confidence ?? 0,
     }));
 
-    return NextResponse.json(items);
+    const jobs = await fetchLinkedInJobs(body.linkedin, token);
+
+    return NextResponse.json({ items, jobs });
   } catch (err) {
-    return NextResponse.json({ error: "Failed to fetch from Exa" }, { status: 500 });
+    return NextResponse.json({ items: [], jobs: [], error: "Failed to fetch from Exa" }, { status: 500 });
   }
 }
