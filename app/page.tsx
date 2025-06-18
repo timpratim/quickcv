@@ -111,11 +111,22 @@ export default function AutoResumePage() {
 
   const handleGenerate = async () => {
     setStep("processing")
-    // Simulate API call
-    setTimeout(() => {
-      setContentItems(mockContentItems)
-      setStep("editor")
-    }, 2000)
+    try {
+      const res = await fetch("/api/exa-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(userInput),
+      })
+      if (res.ok) {
+        const data: ContentItem[] = await res.json()
+        setContentItems(data)
+      } else {
+        setContentItems([])
+      }
+    } catch (err) {
+      setContentItems([])
+    }
+    setStep("editor")
   }
 
   const assignContentToJob = (contentId: string, jobId: string) => {
