@@ -1,4 +1,49 @@
 import { NextResponse } from 'next/server';
+
+// Define a type for the profile data structure, mirroring frontend if possible
+// This helps ensure the dummy data matches what the frontend expects.
+interface ProfileItem {
+  date_or_year: string;
+  item: string;
+  details: string;
+  source: string;
+}
+
+interface ProfileData {
+  work_history?: ProfileItem[];
+  blogs_articles?: ProfileItem[];
+  open_source_projects?: ProfileItem[];
+  videos?: ProfileItem[];
+  conference_meetup_talks?: ProfileItem[];
+  awards_honours?: ProfileItem[];
+  public_praise_social_media?: ProfileItem[];
+  domain_specific_contributions?: ProfileItem[];
+  impact_summary?: string;
+}
+
+const DUMMY_ELON_MUSK_PROFILE_DATA: ProfileData = {
+  impact_summary: "Elon Musk is a visionary entrepreneur known for co-founding Tesla, SpaceX, Neuralink, and The Boring Company. This is DUMMY DATA for testing.",
+  work_history: [
+    { date_or_year: "2002-Present", item: "SpaceX", details: "Founder, CEO, CTO. Revolutionizing space technology. (Dummy Data)", source: "https://www.spacex.com/dummy" },
+    { date_or_year: "2004-Present", item: "Tesla, Inc.", details: "Co-founder, CEO, Product Architect. Accelerating sustainable energy. (Dummy Data)", source: "https://www.tesla.com/dummy" },
+    { date_or_year: "2016-Present", item: "Neuralink", details: "Co-founder. Developing brain-machine interfaces. (Dummy Data)", source: "https://www.neuralink.com/dummy" },
+  ],
+  open_source_projects: [
+    { date_or_year: "2015", item: "OpenAI (initial involvement)", details: "Co-founded, aiming for safe AGI. (Dummy Data)", source: "https://openai.com/dummy" },
+  ],
+  blogs_articles: [], // Leaving some sections empty for testing UI robustness
+  videos: [
+    { date_or_year: "Various", item: "Tesla AI Day Presentations", details: "Showcasing Tesla's AI advancements. (Dummy Data)", source: "https://youtube.com/dummy/teslai" }
+  ],
+  conference_meetup_talks: [],
+  awards_honours: [
+    { date_or_year: "2021", item: "Time Person of the Year", details: "Awarded by Time Magazine. (Dummy Data)", source: "https://time.com/dummy" }
+  ],
+  public_praise_social_media: [],
+  domain_specific_contributions: [
+    { date_or_year: "Ongoing", item: "Reusable Rocket Technology", details: "Pioneered by SpaceX, significantly reducing launch costs. (Dummy Data)", source: "https://spacex.com/dummy/reusablerockets"}
+  ]
+};
 import Exa from 'exa-js';
 
 const EXASEARCH_API_KEY = process.env.EXASEARCH_API_KEY;
@@ -149,6 +194,12 @@ const researchOutputSchema = {
 export async function POST(request: Request) {
   try {
     const { name } = await request.json();
+
+    // Check for dummy data request
+    if (name && typeof name === 'string' && name.trim().toLowerCase() === 'elon musk') {
+      console.log("Returning DUMMY profile data for Elon Musk.");
+      return NextResponse.json(DUMMY_ELON_MUSK_PROFILE_DATA);
+    }
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return NextResponse.json({ error: 'Name is required and must be a non-empty string' }, { status: 400 });
