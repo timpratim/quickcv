@@ -1,188 +1,235 @@
 import { NextResponse } from 'next/server';
 import Exa from 'exa-js';
-import OpenAI from 'openai';
 
-// Define the expected request body structure (mirroring UserInput + jobPostingUrl)
-interface GenerateResumeRequest {
-  name: string;
-  description: string;
-  github?: string;
-  twitter?: string;
-  linkedin?: string;
-  youtube?: string;
-  role?: string;
-  companyWebsite?: string;
-  jobPostingUrl?: string; // Added job posting URL
-  jobs: Array<{
-    id: string;
-    title: string;
-    company: string;
-    startDate: string;
-    endDate: string;
-    description?: string;
-  }>;
+const EXASEARCH_API_KEY = process.env.EXASEARCH_API_KEY;
+
+if (!EXASEARCH_API_KEY) {
+  console.error('EXASEARCH_API_KEY environment variable is not set');
+  // Potentially return an error response here if you want to handle it gracefully at runtime
+  // For now, it will throw an error during server startup if the key is missing.
+  throw new Error('EXASEARCH_API_KEY environment variable is not set');
 }
 
-// Define the structure for content items found by Exa
-interface DiscoveredContentItem {
-  id: string;
-  title: string;
-  type: "github" | "blog" | "video" | "talk" | "other" | "linkedin" | "company" | "job_posting";
-  url: string;
-  date?: string; // Exa results might not always have a date
-  description: string; // We'll use Exa's 'highlights' or 'text' here
-  relevanceScore: number; // Exa's 'score'
-}
+const exa = new Exa(EXASEARCH_API_KEY);
 
-// Define the expected response body structure
-interface GenerateResumeResponse {
-  generatedResumeText: string;
-  discoveredContentItems: DiscoveredContentItem[];
-}
-
-const EXA_API_KEY = process.env.EXASEARCH_API_KEY;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
-const exa = new Exa(EXA_API_KEY);
+const researchOutputSchema = {
+  type: "object",
+  required: [
+    "work_history",
+    "blogs_articles",
+    "open_source_projects",
+    "videos",
+    "conference_meetup_talks",
+    "awards_honours",
+    "public_praise_social_media",
+    "domain_specific_contributions",
+    "impact_summary"
+  ],
+  properties: {
+    work_history: {
+      type: "array",
+      description: "Employer, role, start-end month-year.",
+      items: {
+        type: "object",
+        required: ["date_or_year", "item", "details", "source"],
+        properties: {
+          date_or_year: { type: "string", description: "Date or year, mark 'approx.' if unclear." },
+          item: { type: "string", description: "Main identifier (e.g., Employer, Title, Repo)." },
+          details: { type: "string", description: "Specifics (e.g., Role, Platform, Purpose)." },
+          source: { type: "string", description: "Inline citation URL." }
+        }
+      }
+    },
+    blogs_articles: {
+      type: "array",
+      description: "Title, platform, date.",
+      items: {
+        type: "object",
+        required: ["date_or_year", "item", "details", "source"],
+        properties: {
+          date_or_year: { type: "string", description: "Date or year, mark 'approx.' if unclear." },
+          item: { type: "string", description: "Main identifier (e.g., Employer, Title, Repo)." },
+          details: { type: "string", description: "Specifics (e.g., Role, Platform, Purpose)." },
+          source: { type: "string", description: "Inline citation URL." }
+        }
+      }
+    },
+    open_source_projects: {
+      type: "array",
+      description: "Repo, purpose, the person’s role (owner, maintainer, contributor).",
+      items: {
+        type: "object",
+        required: ["date_or_year", "item", "details", "source"],
+        properties: {
+          date_or_year: { type: "string", description: "Date or year, mark 'approx.' if unclear." },
+          item: { type: "string", description: "Main identifier (e.g., Employer, Title, Repo)." },
+          details: { type: "string", description: "Specifics (e.g., Role, Platform, Purpose)." },
+          source: { type: "string", description: "Inline citation URL." }
+        }
+      }
+    },
+    videos: {
+      type: "array",
+      description: "Title, platform or event, date.",
+      items: {
+        type: "object",
+        required: ["date_or_year", "item", "details", "source"],
+        properties: {
+          date_or_year: { type: "string", description: "Date or year, mark 'approx.' if unclear." },
+          item: { type: "string", description: "Main identifier (e.g., Employer, Title, Repo)." },
+          details: { type: "string", description: "Specifics (e.g., Role, Platform, Purpose)." },
+          source: { type: "string", description: "Inline citation URL." }
+        }
+      }
+    },
+    conference_meetup_talks: {
+      type: "array",
+      description: "Event name, city or online, talk title, date, the person’s role (speaker, host).",
+      items: {
+        type: "object",
+        required: ["date_or_year", "item", "details", "source"],
+        properties: {
+          date_or_year: { type: "string", description: "Date or year, mark 'approx.' if unclear." },
+          item: { type: "string", description: "Main identifier (e.g., Employer, Title, Repo)." },
+          details: { type: "string", description: "Specifics (e.g., Role, Platform, Purpose)." },
+          source: { type: "string", description: "Inline citation URL." }
+        }
+      }
+    },
+    awards_honours: {
+      type: "array",
+      description: "Award name, year, awarding body, short reason if given.",
+      items: {
+        type: "object",
+        required: ["date_or_year", "item", "details", "source"],
+        properties: {
+          date_or_year: { type: "string", description: "Date or year, mark 'approx.' if unclear." },
+          item: { type: "string", description: "Main identifier (e.g., Employer, Title, Repo)." },
+          details: { type: "string", description: "Specifics (e.g., Role, Platform, Purpose)." },
+          source: { type: "string", description: "Inline citation URL." }
+        }
+      }
+    },
+    public_praise_social_media: {
+      type: "array",
+      description: "Platform, date, who praised, one-line quote or paraphrase, context.",
+      items: {
+        type: "object",
+        required: ["date_or_year", "item", "details", "source"],
+        properties: {
+          date_or_year: { type: "string", description: "Date or year, mark 'approx.' if unclear." },
+          item: { type: "string", description: "Main identifier (e.g., Employer, Title, Repo)." },
+          details: { type: "string", description: "Specifics (e.g., Role, Platform, Purpose)." },
+          source: { type: "string", description: "Inline citation URL." }
+        }
+      }
+    },
+    domain_specific_contributions: {
+      type: "array",
+      description: "Major technical or creative work. Include blogs, code, docs, demos, and talks.",
+      items: {
+        type: "object",
+        required: ["date_or_year", "item", "details", "source"],
+        properties: {
+          date_or_year: { type: "string", description: "Date or year, mark 'approx.' if unclear." },
+          item: { type: "string", description: "Main identifier (e.g., Employer, Title, Repo)." },
+          details: { type: "string", description: "Specifics (e.g., Role, Platform, Purpose)." },
+          source: { type: "string", description: "Inline citation URL." }
+        }
+      }
+    },
+    impact_summary: {
+      type: "string",
+      description: "One short paragraph that sums up impact."
+    }
+  },
+  additionalProperties: false
+};
 
 export async function POST(request: Request) {
-  if (!EXA_API_KEY) {
-    return NextResponse.json({ error: 'Exa API key is not configured.' }, { status: 500 });
-  }
-  if (!OPENAI_API_KEY) {
-    return NextResponse.json({ error: 'OpenAI API key is not configured.' }, { status: 500 });
-  }
-
   try {
-    const body: GenerateResumeRequest = await request.json();
-    console.log("Received user input:", body);
+    const { name } = await request.json();
 
-    let discoveredItems: DiscoveredContentItem[] = [];
-
-    // --- Exa AI Integration --- 
-    try {
-      // 1. Fetch content related to user's public profiles
-      if (body.linkedin) {
-        console.log(`Searching Exa for similar content to LinkedIn: ${body.linkedin}`);
-        const linkedinResults = await exa.findSimilar(body.linkedin, { numResults: 3 });
-        linkedinResults.results.forEach(result => {
-          discoveredItems.push({
-            id: result.id || result.url,
-            title: result.title || 'LinkedIn Related Content',
-            type: 'linkedin',
-            url: result.url,
-            date: result.publishedDate,
-            description: result.text || '',
-            relevanceScore: result.score || 0,
-          });
-        });
-      }
-
-      if (body.github) {
-        console.log(`Searching Exa for similar content to GitHub: ${body.github}`);
-        const githubResults = await exa.findSimilar(body.github, { numResults: 3 });
-        githubResults.results.forEach(result => {
-          discoveredItems.push({
-            id: result.id || result.url,
-            title: result.title || 'GitHub Related Content',
-            type: 'github',
-            url: result.url,
-            date: result.publishedDate,
-            description: result.text || '',
-            relevanceScore: result.score || 0,
-          });
-        });
-      }
-
-      // 2. Fetch content related to job/company context
-      let jobContextQuery = `Information about the role of ${body.role}`;
-      if (body.companyWebsite) jobContextQuery += ` at company ${body.companyWebsite}`;
-      if (body.jobPostingUrl) jobContextQuery += ` and job posting ${body.jobPostingUrl}`;
-      else if (body.companyWebsite && !body.jobPostingUrl) jobContextQuery += `. Focus on company culture, products, and recent news.`;
-      
-      console.log(`Searching Exa with query: ${jobContextQuery}`);
-      const jobContextResults = await exa.search(jobContextQuery, { 
-        numResults: 5, 
-        useAutoprompt: true, 
-        type: 'neural' // Prefer neural search for broader context
-      });
-      jobContextResults.results.forEach(result => {
-        discoveredItems.push({
-          id: result.id || result.url,
-          title: result.title || 'Job/Company Context',
-          type: body.jobPostingUrl && result.url.includes(new URL(body.jobPostingUrl).hostname) ? 'job_posting' : 'company',
-          url: result.url,
-          date: result.publishedDate,
-          description: result.text || '',
-          relevanceScore: result.score || 0,
-        });
-      });
-
-    } catch (exaError) {
-      console.error('Exa AI API Error:', exaError);
-      // Don't fail the whole request, proceed with what we have or mock data
-      // Or, return an error if Exa data is critical and couldn't be fetched
-      // For now, we'll add a placeholder item indicating the error.
-      discoveredItems.push({
-        id: 'exa-error',
-        title: 'Error fetching data from Exa AI',
-        type: 'other',
-        url: '',
-        description: exaError instanceof Error ? exaError.message : String(exaError),
-        relevanceScore: 0
-      });
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return NextResponse.json({ error: 'Name is required and must be a non-empty string' }, { status: 400 });
     }
-    
-    // Deduplicate items by URL to avoid sending same content to OpenAI multiple times
-    const uniqueUrls = new Set<string>();
-    const uniqueDiscoveredItems = discoveredItems.filter(item => {
-      if (!uniqueUrls.has(item.url)) {
-        uniqueUrls.add(item.url);
-        return true;
-      }
-      return false;
+
+    const instructions = `Build a full public profile for ${name}. 
+Use only data that is public as of TODAY.
+
+SCOPE – produce these eight sections, in order
+
+1. **Work history**
+   • Employer, role, start-end month-year.
+
+2. **Blogs / articles**
+   • Title, platform, date.
+
+3. **Open-source / code projects**
+   • Repo, purpose, the person’s role (owner, maintainer, contributor).
+
+4. **Videos**
+   • Title, platform or event, date.
+
+5. **Conference / meetup talks**
+   • Event name, city or online, talk title, date, the person’s role (speaker, host).
+
+6. **Awards and honours**
+   • Award name, year, awarding body, short reason if given.
+
+7. **Public praise on social media**
+   • Platform, date, who praised, one-line quote or paraphrase, context.
+
+8. **Domain-specific contributions**
+   • Summarise major technical or creative work in the person’s main fields.
+   • Group by sub-topics if helpful (for example, “full-text search”, “vector search”, “hybrid search”).
+   • Include blogs, code, docs, demos, and talks that teach or advance these areas.
+
+METHOD
+• Search LinkedIn, GitHub, personal blogs, tech blogs, Dev.to, Hashnode, YouTube, X/Twitter, Meetup.com, Luma, conference sites, and news.
+• Prefer primary sources.
+• After each item in the tables, provide an inline citation URL in the 'source' field of the JSON object for that item.
+• Mark dates as “approx.” if unclear in the 'date_or_year' field.
+• Skip speculation and duplicates.
+
+OUTPUT RULES
+• For each of the first eight sections, structure the output as an array of objects, where each object corresponds to a row in a table. Each object must have the fields: "date_or_year", "item", "details", and "source".
+• The 'item' field should contain the primary piece of information (e.g., Employer for work history, Title for blogs/videos, Repo name for projects).
+• The 'details' field should contain supplementary information (e.g., Role for work history, Platform for blogs, Purpose for projects).
+• The 'date_or_year' field should capture the relevant date or year.
+• The 'source' field must be a valid URL pointing to the source of the information.
+• After the eight sections, provide a single string for "impact_summary". This summary should be a short paragraph that sums up the person's impact.
+• Use short sentences. Choose simple words. Write in active voice. Avoid adverbs where you can.
+• Check grammar and spelling.
+• Do not add flattery.
+END`;
+
+    console.log(`Creating Exa research task for: ${name}`);
+    const task = await exa.research.createTask({
+      model: "exa-research-pro",
+      instructions: instructions,
+      output: {
+        schema: researchOutputSchema as any, // Cast to any to bypass strict JSONSchema type issues
+      },
     });
+    console.log(`Exa task created, ID: ${task.id} for name: ${name}`);
+    
+    console.log(`Polling for Exa research results for task ID: ${task.id}`);
+    const result = await exa.research.pollTask(task.id);
+    console.log(`Exa Research result for ${name}:`, result);
 
-    // --- TODO: OpenAI Integration --- 
-    // 1. Take info from Exa (uniqueDiscoveredItems) and user input (body).
-    // 2. Construct a prompt for OpenAI to generate resume sections.
-    // 3. Generate the resume text.
-
-    // Mock OpenAI response for now, using the fetched Exa items
-    const mockResumeText = `
-# ${body.name || 'Your Name'}
-${body.description || 'A passionate developer.'}
-
-## Experience
-${body.jobs.map(job => `### ${job.title} at ${job.company}\n${job.startDate} - ${job.endDate}\n${job.description || ''}`).join('\n\n')}
-
-## Discovered Online Presence & Job Context (from Exa AI)
-This section highlights content found online related to your profile and the target job/company:
-${uniqueDiscoveredItems.map(item => `- **${item.title}** (${item.type}, Score: ${item.relevanceScore.toFixed(2)})\n  URL: ${item.url}\n  Highlights: ${item.description.substring(0, 200)}...`).join('\n\n')}
-
-This resume needs to be tailored for the ${body.role || 'New Role'} at ${body.companyWebsite || 'Target Company'}.
-Job Posting: ${body.jobPostingUrl || 'N/A'}
-`;
-
-    const response: GenerateResumeResponse = {
-      generatedResumeText: mockResumeText,
-      discoveredContentItems: uniqueDiscoveredItems.length > 0 ? uniqueDiscoveredItems : [{
-        id: 'no-exa-results',
-        title: 'No specific content found by Exa AI or an error occurred.',
-        type: 'other',
-        url: '',
-        description: 'Could not retrieve specific items from Exa AI. The resume will be based on your manual inputs.',
-        relevanceScore: 0
-      }],
-    };
-
-    return NextResponse.json(response);
+    // Return only the data field from the Exa research result
+    if (result.status === 'completed' && result.data) {
+      return NextResponse.json(result.data);
+    } else {
+      // Handle cases where the task didn't complete successfully or data is missing
+      console.error('Exa research task did not complete successfully or data is missing:', result);
+      return NextResponse.json({ error: 'Failed to retrieve profile data from Exa.', details: result.status }, { status: 500 });
+    }
 
   } catch (error) {
-    console.error('Error processing request:', error);
-    if (error instanceof SyntaxError) {
-      return NextResponse.json({ error: 'Invalid JSON in request body.' }, { status: 400 });
-    }
-    return NextResponse.json({ error: 'An unexpected error occurred.' }, { status: 500 });
+    console.error('Error in Exa Research API call (/api/generate-resume):', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    return NextResponse.json({ error: 'Failed to fetch profile using Exa Research API.', details: errorMessage }, { status: 500 });
   }
 }
