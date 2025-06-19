@@ -279,7 +279,7 @@ export default function AutoResumePage() {
         <Card className="w-full">
           <CardHeader>
             <CardTitle>Generate a Professional Profile</CardTitle>
-            <CardDescription>Enter a full name to find their public work and projects using Exa Research API.</CardDescription>
+            <CardDescription>Enter a full name to find their public work and projects.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col sm:flex-row gap-4">
