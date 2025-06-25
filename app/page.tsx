@@ -18,7 +18,8 @@ import {
   FileText,
   Edit,
   Save,
-  X /*, Link as LinkIcon, Rss, Mic */,
+  X,
+  GripVertical /*, Link as LinkIcon, Rss, Mic */,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -36,6 +37,25 @@ import {
   BorderStyle,
 } from "docx";
 import { saveAs } from "file-saver";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import {
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface ProfileItem {
   date_or_year: string;
@@ -56,6 +76,169 @@ interface ProfileData {
   impact_summary?: string[];
 }
 
+const SortableRow: React.FC<{
+  item: ProfileItem;
+  index: number;
+  sectionKey: keyof ProfileData;
+  isEditing: boolean;
+  onItemChange: (
+    sectionKey: keyof ProfileData,
+    itemIndex: number,
+    field: keyof ProfileItem,
+    value: string
+  ) => void;
+  onDeleteItem: (sectionKey: keyof ProfileData, itemIndex: number) => void;
+}> = ({
+  item,
+  index,
+  sectionKey,
+  isEditing,
+  onItemChange,
+  onDeleteItem,
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: `${String(sectionKey)}-${index}` });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      className={`${isDragging ? "bg-gray-100" : ""}`}
+      key={`${String(sectionKey)}-${index}`}
+    >
+      {isEditing && (
+        <td className="px-2 py-4 w-8">
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-100 rounded"
+          >
+            <GripVertical className="h-4 w-4 text-gray-400" />
+          </div>
+        </td>
+      )}
+      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+        {isEditing ? (
+          <Input
+            value={item.date_or_year}
+            onChange={(e) =>
+              onItemChange(
+                sectionKey,
+                index,
+                "date_or_year",
+                e.target.value
+              )
+            }
+            className="min-w-0 text-sm text-gray-700 border-0 bg-transparent p-1 focus:bg-white focus:border-gray-300"
+          />
+        ) : (
+          item.date_or_year
+        )}
+      </td>
+      <td className="px-4 py-4 text-sm font-medium text-gray-900 break-words">
+        {isEditing ? (
+          <Textarea
+            value={item.item}
+            onChange={(e) =>
+              onItemChange(
+                sectionKey,
+                index,
+                "item",
+                e.target.value
+              )
+            }
+            className="min-w-0 text-sm font-medium text-gray-900 border-0 bg-transparent p-1 focus:bg-white focus:border-gray-300 min-h-8"
+            rows={1}
+          />
+        ) : (
+          item.item
+        )}
+      </td>
+      <td className="px-4 py-4 text-sm text-gray-700 break-words">
+        {isEditing ? (
+          <div className="flex items-start gap-2">
+            <Textarea
+              value={item.details}
+              onChange={(e) =>
+                onItemChange(
+                  sectionKey,
+                  index,
+                  "details",
+                  e.target.value
+                )
+              }
+              className="min-w-0 text-sm text-gray-700 border-0 bg-transparent p-1 focus:bg-white focus:border-gray-300 min-h-8 flex-1"
+              rows={2}
+            />
+            {sectionKey === "work_history" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onDeleteItem(sectionKey, index)}
+                className="text-red-500 hover:text-red-700 p-1 h-auto"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        ) : (
+          item.details
+        )}
+      </td>
+      {sectionKey !== "work_history" && (
+        <td className="px-4 py-4 whitespace-nowrap text-sm text-blue-600">
+          {isEditing ? (
+            <div className="flex items-center gap-2">
+              <Input
+                value={item.source}
+                onChange={(e) =>
+                  onItemChange(
+                    sectionKey,
+                    index,
+                    "source",
+                    e.target.value
+                  )
+                }
+                className="min-w-0 text-sm text-blue-600 border-0 bg-transparent p-1 focus:bg-white focus:border-gray-300"
+                placeholder="URL"
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onDeleteItem(sectionKey, index)}
+                className="text-red-500 hover:text-red-700 p-1 h-auto"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          ) : (
+            <a
+              href={item.source}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline"
+            >
+              Link
+            </a>
+          )}
+        </td>
+      )}
+    </tr>
+  );
+};
+
 const SectionDisplay: React.FC<{
   title: string;
   items: ProfileItem[] | undefined;
@@ -69,6 +252,7 @@ const SectionDisplay: React.FC<{
   ) => void;
   onDeleteItem: (sectionKey: keyof ProfileData, itemIndex: number) => void;
   onAddItem: (sectionKey: keyof ProfileData) => void;
+  onReorderItems: (sectionKey: keyof ProfileData, oldIndex: number, newIndex: number) => void;
 }> = ({
   title,
   items,
@@ -77,12 +261,34 @@ const SectionDisplay: React.FC<{
   onItemChange,
   onDeleteItem,
   onAddItem,
+  onReorderItems,
 }) => {
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
   if (!items || items.length === 0) {
     // Optionally, render a message like:
     // return <p className="mt-4 text-gray-600">No {title.toLowerCase()} found for this profile.</p>;
     return null;
   }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+
+    if (active.id !== over?.id && items) {
+      const oldIndex = items.findIndex((_, i) => `${String(sectionKey)}-${i}` === active.id);
+      const newIndex = items.findIndex((_, i) => `${String(sectionKey)}-${i}` === over?.id);
+      
+      if (oldIndex !== -1 && newIndex !== -1) {
+        onReorderItems(sectionKey, oldIndex, newIndex);
+      }
+    }
+  }
+
   return (
     <Card className="mt-6 w-full" id={`section-${String(sectionKey)}`}>
       <CardHeader>
@@ -90,150 +296,70 @@ const SectionDisplay: React.FC<{
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  Date/Year
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  Item
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  Details
-                </th>
-                {sectionKey !== "work_history" && (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  {isEditing && (
+                    <th
+                      scope="col"
+                      className="px-2 py-3 w-8"
+                    >
+                      <span className="sr-only">Drag handle</span>
+                    </th>
+                  )}
                   <th
                     scope="col"
                     className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                   >
-                    Source
+                    Date/Year
                   </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {items.map((item, index) => (
-                <tr key={`${String(sectionKey)}-${index}`}>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
-                    {isEditing ? (
-                      <Input
-                        value={item.date_or_year}
-                        onChange={(e) =>
-                          onItemChange(
-                            sectionKey,
-                            index,
-                            "date_or_year",
-                            e.target.value
-                          )
-                        }
-                        className="min-w-0 text-sm text-gray-700 border-0 bg-transparent p-1 focus:bg-white focus:border-gray-300"
-                      />
-                    ) : (
-                      item.date_or_year
-                    )}
-                  </td>
-                  <td className="px-4 py-4 text-sm font-medium text-gray-900 break-words">
-                    {isEditing ? (
-                      <Textarea
-                        value={item.item}
-                        onChange={(e) =>
-                          onItemChange(
-                            sectionKey,
-                            index,
-                            "item",
-                            e.target.value
-                          )
-                        }
-                        className="min-w-0 text-sm font-medium text-gray-900 border-0 bg-transparent p-1 focus:bg-white focus:border-gray-300 min-h-8"
-                        rows={1}
-                      />
-                    ) : (
-                      item.item
-                    )}
-                  </td>
-                  <td className="px-4 py-4 text-sm text-gray-700 break-words">
-                    {isEditing ? (
-                      <div className="flex items-start gap-2">
-                        <Textarea
-                          value={item.details}
-                          onChange={(e) =>
-                            onItemChange(
-                              sectionKey,
-                              index,
-                              "details",
-                              e.target.value
-                            )
-                          }
-                          className="min-w-0 text-sm text-gray-700 border-0 bg-transparent p-1 focus:bg-white focus:border-gray-300 min-h-8 flex-1"
-                          rows={2}
-                        />
-                        {sectionKey === "work_history" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onDeleteItem(sectionKey, index)}
-                            className="text-red-500 hover:text-red-700 p-1 h-auto"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
-                      item.details
-                    )}
-                  </td>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Item
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Details
+                  </th>
                   {sectionKey !== "work_history" && (
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-blue-600">
-                      {isEditing ? (
-                        <div className="flex items-center gap-2">
-                          <Input
-                            value={item.source}
-                            onChange={(e) =>
-                              onItemChange(
-                                sectionKey,
-                                index,
-                                "source",
-                                e.target.value
-                              )
-                            }
-                            className="min-w-0 text-sm text-blue-600 border-0 bg-transparent p-1 focus:bg-white focus:border-gray-300"
-                            placeholder="URL"
-                          />
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onDeleteItem(sectionKey, index)}
-                            className="text-red-500 hover:text-red-700 p-1 h-auto"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <a
-                          href={item.source}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="hover:underline"
-                        >
-                          Link
-                        </a>
-                      )}
-                    </td>
+                    <th
+                      scope="col"
+                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Source
+                    </th>
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <SortableContext
+                items={items.map((_, i) => `${String(sectionKey)}-${i}`)}
+                strategy={verticalListSortingStrategy}
+              >
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {items.map((item, index) => (
+                    <SortableRow
+                      key={`${String(sectionKey)}-${index}`}
+                      item={item}
+                      index={index}
+                      sectionKey={sectionKey}
+                      isEditing={isEditing}
+                      onItemChange={onItemChange}
+                      onDeleteItem={onDeleteItem}
+                    />
+                  ))}
+                </tbody>
+              </SortableContext>
+            </table>
+          </DndContext>
         </div>
         {isEditing && (
           <div className="mt-4">
@@ -831,6 +957,22 @@ export default function AutoResumePage() {
     setProfileData(newProfileData);
   };
 
+  const handleReorderItems = (
+    sectionKey: keyof ProfileData,
+    oldIndex: number,
+    newIndex: number
+  ) => {
+    if (!profileData) return;
+
+    const newProfileData = { ...profileData };
+    const sectionItems = newProfileData[sectionKey] as ProfileItem[];
+    if (sectionItems) {
+      const reorderedItems = arrayMove(sectionItems, oldIndex, newIndex);
+      (newProfileData[sectionKey] as ProfileItem[]) = reorderedItems;
+      setProfileData(newProfileData);
+    }
+  };
+
   const handleToggleEdit = () => {
     setIsEditing(!isEditing);
   };
@@ -1183,6 +1325,7 @@ export default function AutoResumePage() {
               onItemChange={handleItemChange}
               onDeleteItem={handleDeleteItem}
               onAddItem={handleAddItem}
+              onReorderItems={handleReorderItems}
             />
             <SectionDisplay
               title="Blogs / Articles"
@@ -1192,6 +1335,7 @@ export default function AutoResumePage() {
               onItemChange={handleItemChange}
               onDeleteItem={handleDeleteItem}
               onAddItem={handleAddItem}
+              onReorderItems={handleReorderItems}
             />
             <SectionDisplay
               title="Open Source / Code Projects"
@@ -1201,6 +1345,7 @@ export default function AutoResumePage() {
               onItemChange={handleItemChange}
               onDeleteItem={handleDeleteItem}
               onAddItem={handleAddItem}
+              onReorderItems={handleReorderItems}
             />
             <SectionDisplay
               title="Videos"
@@ -1210,6 +1355,7 @@ export default function AutoResumePage() {
               onItemChange={handleItemChange}
               onDeleteItem={handleDeleteItem}
               onAddItem={handleAddItem}
+              onReorderItems={handleReorderItems}
             />
             <SectionDisplay
               title="Conference / Meetup Talks"
@@ -1219,6 +1365,7 @@ export default function AutoResumePage() {
               onItemChange={handleItemChange}
               onDeleteItem={handleDeleteItem}
               onAddItem={handleAddItem}
+              onReorderItems={handleReorderItems}
             />
             <SectionDisplay
               title="Awards and Honours"
@@ -1228,6 +1375,7 @@ export default function AutoResumePage() {
               onItemChange={handleItemChange}
               onDeleteItem={handleDeleteItem}
               onAddItem={handleAddItem}
+              onReorderItems={handleReorderItems}
             />
             <SectionDisplay
               title="Public Praise on Social Media"
@@ -1237,6 +1385,7 @@ export default function AutoResumePage() {
               onItemChange={handleItemChange}
               onDeleteItem={handleDeleteItem}
               onAddItem={handleAddItem}
+              onReorderItems={handleReorderItems}
             />
             <SectionDisplay
               title="Domain-Specific Contributions"
@@ -1246,6 +1395,7 @@ export default function AutoResumePage() {
               onItemChange={handleItemChange}
               onDeleteItem={handleDeleteItem}
               onAddItem={handleAddItem}
+              onReorderItems={handleReorderItems}
             />
           </div>
         )}
