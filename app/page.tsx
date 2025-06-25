@@ -111,12 +111,14 @@ const SectionDisplay: React.FC<{
                 >
                   Details
                 </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  Source
-                </th>
+                {sectionKey !== "work_history" && (
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Source
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -161,59 +163,73 @@ const SectionDisplay: React.FC<{
                   </td>
                   <td className="px-4 py-4 text-sm text-gray-700 break-words">
                     {isEditing ? (
-                      <Textarea
-                        value={item.details}
-                        onChange={(e) =>
-                          onItemChange(
-                            sectionKey,
-                            index,
-                            "details",
-                            e.target.value
-                          )
-                        }
-                        className="min-w-0 text-sm text-gray-700 border-0 bg-transparent p-1 focus:bg-white focus:border-gray-300 min-h-8"
-                        rows={2}
-                      />
-                    ) : (
-                      item.details
-                    )}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-blue-600">
-                    {isEditing ? (
-                      <div className="flex items-center gap-2">
-                        <Input
-                          value={item.source}
+                      <div className="flex items-start gap-2">
+                        <Textarea
+                          value={item.details}
                           onChange={(e) =>
                             onItemChange(
                               sectionKey,
                               index,
-                              "source",
+                              "details",
                               e.target.value
                             )
                           }
-                          className="min-w-0 text-sm text-blue-600 border-0 bg-transparent p-1 focus:bg-white focus:border-gray-300"
-                          placeholder="URL"
+                          className="min-w-0 text-sm text-gray-700 border-0 bg-transparent p-1 focus:bg-white focus:border-gray-300 min-h-8 flex-1"
+                          rows={2}
                         />
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onDeleteItem(sectionKey, index)}
-                          className="text-red-500 hover:text-red-700 p-1 h-auto"
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
+                        {sectionKey === "work_history" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onDeleteItem(sectionKey, index)}
+                            className="text-red-500 hover:text-red-700 p-1 h-auto"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
                       </div>
                     ) : (
-                      <a
-                        href={item.source}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:underline"
-                      >
-                        Link
-                      </a>
+                      item.details
                     )}
                   </td>
+                  {sectionKey !== "work_history" && (
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-blue-600">
+                      {isEditing ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={item.source}
+                            onChange={(e) =>
+                              onItemChange(
+                                sectionKey,
+                                index,
+                                "source",
+                                e.target.value
+                              )
+                            }
+                            className="min-w-0 text-sm text-blue-600 border-0 bg-transparent p-1 focus:bg-white focus:border-gray-300"
+                            placeholder="URL"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onDeleteItem(sectionKey, index)}
+                            className="text-red-500 hover:text-red-700 p-1 h-auto"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <a
+                          href={item.source}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:underline"
+                        >
+                          Link
+                        </a>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -982,7 +998,7 @@ export default function AutoResumePage() {
           <div id="profile-content" className="mt-10 w-full">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-3xl font-semibold text-gray-800">
-                Generated Profile for {name}
+                Public Profile for {name}
               </h2>
               <div className="flex gap-2">
                 {isEditing ? (

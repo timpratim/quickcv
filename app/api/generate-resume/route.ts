@@ -242,7 +242,7 @@ METHOD
 • After each item in the tables, provide an inline citation URL in the 'source' field of the JSON object for that item.
 • Mark dates as “approx.” if unclear in the 'date_or_year' field.
 • Skip speculation and duplicates.
-
+• Get updated work history from LinkedIn.
 OUTPUT RULES
 • For each of the first eight sections, structure the output as an array of objects, where each object corresponds to a row in a table. Each object must have the fields: "date_or_year", "item", "details", and "source".
 • The 'item' field should contain the primary piece of information (e.g., Employer for work history, Title for blogs/videos, Repo name for projects).
