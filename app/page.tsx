@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,6 +9,8 @@ import { /* Github, Youtube, */ Search, Download, FileText /*, Link as LinkIcon,
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { format } from 'date-fns';
+import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel, WidthType, BorderStyle } from 'docx';
+import { saveAs } from 'file-saver';
 
 interface ProfileItem {
   date_or_year: string;
@@ -74,9 +76,15 @@ export default function AutoResumePage() {
   const [name, setName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false); // Added state for PDF download
+  const [isDownloadingDocx, setIsDownloadingDocx] = useState(false); // Added state for DOCX download
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   // const [contentItems, setContentItems] = useState<ContentItem[]>([]); // Old state
   const [error, setError] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const handleGenerate = async () => {
     if (!name.trim()) {
@@ -106,9 +114,9 @@ export default function AutoResumePage() {
         console.error("Backend error:", errorData);
         setProfileData(null);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Frontend error calling /api/generate-resume:", err);
-      setError(`Failed to fetch profile: ${err.message || 'Unknown error'}`);
+      setError(`Failed to fetch profile: ${err instanceof Error ? err.message : 'Unknown error'}`);
       setProfileData(null);
     }
 
@@ -200,8 +208,8 @@ export default function AutoResumePage() {
           const imgHeight = imgProps.height;
           const aspectRatio = imgWidth / imgHeight;
           
-          let newImgWidth = pdfWidth - (margin * 2);
-          let newImgHeight = newImgWidth / aspectRatio;
+          const newImgWidth = pdfWidth - (margin * 2);
+          const newImgHeight = newImgWidth / aspectRatio;
           
           // Check if image will fit on current page
           if (yPosition + newImgHeight > pdfHeight - margin) {
@@ -264,6 +272,184 @@ export default function AutoResumePage() {
     }
   };
 
+  const handleDownloadDocx = async () => {
+    if (!profileData) return;
+
+    setIsDownloadingDocx(true);
+
+    try {
+      const doc = new Document({
+        sections: [{
+          properties: {},
+          children: [
+            // Header with name and date
+            new Paragraph({
+              text: `${name}'s Professional Profile`,
+              heading: HeadingLevel.TITLE,
+              spacing: {
+                after: 400,
+              },
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `Generated on ${format(new Date(), 'MMMM d, yyyy')}`,
+                  size: 20,
+                  color: "666666",
+                }),
+              ],
+              spacing: {
+                after: 600,
+              },
+            }),
+
+            // Impact Summary
+            ...(profileData.impact_summary ? [
+              new Paragraph({
+                text: "Impact Summary",
+                heading: HeadingLevel.HEADING_1,
+                spacing: {
+                  before: 400,
+                  after: 200,
+                },
+              }),
+              new Paragraph({
+                text: profileData.impact_summary,
+                spacing: {
+                  after: 600,
+                },
+              }),
+            ] : []),
+
+            // Helper function to create sections
+            ...createDocxSections(profileData),
+          ],
+        }],
+      });
+
+      // Generate and save the document
+      const blob = await Packer.toBlob(doc);
+      let profileNameForFile = name.trim();
+      if (!profileNameForFile) {
+        profileNameForFile = "Unnamed";
+      }
+      const sanitizedName = profileNameForFile.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_');
+      const finalFilename = `${sanitizedName}_Profile.docx`;
+      
+      saveAs(blob, finalFilename);
+
+    } catch (error) {
+      console.error('Error generating DOCX:', error);
+      setError('Failed to generate DOCX. See console for details.');
+    } finally {
+      setIsDownloadingDocx(false);
+    }
+  };
+
+  // Helper function to create DOCX sections
+  const createDocxSections = (data: ProfileData) => {
+    const sections = [
+      { title: 'Work History', items: data.work_history },
+      { title: 'Blogs / Articles', items: data.blogs_articles },
+      { title: 'Open Source / Code Projects', items: data.open_source_projects },
+      { title: 'Videos', items: data.videos },
+      { title: 'Conference / Meetup Talks', items: data.conference_meetup_talks },
+      { title: 'Awards and Honours', items: data.awards_honours },
+      { title: 'Public Praise on Social Media', items: data.public_praise_social_media },
+      { title: 'Domain-Specific Contributions', items: data.domain_specific_contributions },
+    ];
+
+    const docxElements = [];
+
+    for (const section of sections) {
+      if (section.items && section.items.length > 0) {
+        // Section heading
+        docxElements.push(
+          new Paragraph({
+            text: section.title,
+            heading: HeadingLevel.HEADING_1,
+            spacing: {
+              before: 600,
+              after: 200,
+            },
+          })
+        );
+
+        // Create table for section data
+        const tableRows = [
+          // Header row
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({ text: "Date/Year", style: "tableHeader" })],
+                width: { size: 15, type: WidthType.PERCENTAGE },
+              }),
+              new TableCell({
+                children: [new Paragraph({ text: "Item", style: "tableHeader" })],
+                width: { size: 30, type: WidthType.PERCENTAGE },
+              }),
+              new TableCell({
+                children: [new Paragraph({ text: "Details", style: "tableHeader" })],
+                width: { size: 40, type: WidthType.PERCENTAGE },
+              }),
+              new TableCell({
+                children: [new Paragraph({ text: "Source", style: "tableHeader" })],
+                width: { size: 15, type: WidthType.PERCENTAGE },
+              }),
+            ],
+          }),
+          // Data rows
+          ...section.items.map(item => 
+            new TableRow({
+              children: [
+                new TableCell({
+                  children: [new Paragraph({ text: item.date_or_year })],
+                }),
+                new TableCell({
+                  children: [new Paragraph({ text: item.item })],
+                }),
+                new TableCell({
+                  children: [new Paragraph({ text: item.details })],
+                }),
+                new TableCell({
+                  children: [new Paragraph({ 
+                    children: [
+                      new TextRun({
+                        text: "Link",
+                        color: "0066CC",
+                      })
+                    ]
+                  })],
+                }),
+              ],
+            })
+          ),
+        ];
+
+        docxElements.push(
+          new Table({
+            rows: tableRows,
+            width: {
+              size: 100,
+              type: WidthType.PERCENTAGE,
+            },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 1 },
+              bottom: { style: BorderStyle.SINGLE, size: 1 },
+              left: { style: BorderStyle.SINGLE, size: 1 },
+              right: { style: BorderStyle.SINGLE, size: 1 },
+              insideHorizontal: { style: BorderStyle.SINGLE, size: 1 },
+              insideVertical: { style: BorderStyle.SINGLE, size: 1 },
+            },
+          }),
+          new Paragraph({ text: "", spacing: { after: 400 } }) // Space after table
+        );
+      }
+    }
+
+    return docxElements;
+  };
+
   //     case 'talk': return <Mic className="h-5 w-5 text-blue-500" />;
   //     default: return <LinkIcon className="h-5 w-5 text-gray-400" />;
   //   }
@@ -273,7 +459,7 @@ export default function AutoResumePage() {
       <div className="w-full max-w-3xl">
         <header className="text-center mb-10">
           <h1 className="text-4xl font-bold text-gray-800">QuickCV</h1>
-          <p className="text-lg text-gray-600 mt-2">Find anyone's professional footprint online.</p>
+          <p className="text-lg text-gray-600 mt-2">Find anyone&apos;s professional footprint online.</p>
         </header>
 
         <Card className="w-full">
@@ -285,15 +471,21 @@ export default function AutoResumePage() {
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-grow">
                 <Label htmlFor="name" className="sr-only">Full Name</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="e.g., 'Will Bryk'"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  disabled={isLoading}
-                  className="text-base"
-                />
+                {isClient ? (
+                  <Input
+                    id="name"
+                    type="text"
+                    placeholder="e.g., &apos;Will Bryk&apos;"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    disabled={isLoading}
+                    className="text-base"
+                  />
+                ) : (
+                  <div className="h-10 bg-gray-100 border border-gray-300 rounded-md flex items-center px-3 text-gray-500">
+                    e.g., &apos;Will Bryk&apos;
+                  </div>
+                )}
               </div>
               <Button onClick={handleGenerate} disabled={isLoading} className="sm:w-auto w-full">
                 {isLoading ? (
@@ -317,24 +509,42 @@ export default function AutoResumePage() {
           <div id="profile-content" className="mt-10 w-full">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-3xl font-semibold text-gray-800">Generated Profile for {name}</h2>
-              <Button 
-                onClick={handleDownloadPdf} 
-                disabled={isDownloadingPdf || !profileData}
-                variant="outline"
-                className="ml-4"
-              >
-                {isDownloadingPdf ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Generating PDF...
-                  </>
-                ) : (
-                  <><FileText className="h-5 w-5 mr-2" /> Export to PDF</>
-                )}
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={handleDownloadPdf} 
+                  disabled={isDownloadingPdf || !profileData}
+                  variant="outline"
+                >
+                  {isDownloadingPdf ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Generating PDF...
+                    </>
+                  ) : (
+                    <><FileText className="h-5 w-5 mr-2" /> Export to PDF</>
+                  )}
+                </Button>
+                <Button 
+                  onClick={handleDownloadDocx} 
+                  disabled={isDownloadingDocx || !profileData}
+                  variant="outline"
+                >
+                  {isDownloadingDocx ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Generating DOCX...
+                    </>
+                  ) : (
+                    <><Download className="h-5 w-5 mr-2" /> Export to DOCX</>
+                  )}
+                </Button>
+              </div>
             </div>
             
             {profileData.impact_summary && (
