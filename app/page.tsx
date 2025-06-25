@@ -277,10 +277,26 @@ export default function AutoResumePage() {
 
         // Convert impact_summary from string to array if needed
         if (data.impact_summary && typeof data.impact_summary === "string") {
-          data.impact_summary = data.impact_summary
-            .split("\n")
-            .map((line: string) => line.replace(/^[•\-\*]\s*/, "").trim())
-            .filter((line: string) => line.length > 0);
+          // Split by sentences that end with periods, keeping the periods
+          const sentences = data.impact_summary
+            .split(/(\.\s+)/)
+            .reduce((acc: string[], part: string, index: number) => {
+              if (index % 2 === 0) {
+                // This is actual content
+                if (part.trim()) {
+                  acc.push(part.trim());
+                }
+              } else {
+                // This is a separator (period + space)
+                if (acc.length > 0) {
+                  acc[acc.length - 1] += ".";
+                }
+              }
+              return acc;
+            }, [])
+            .filter((sentence: string) => sentence.length > 0);
+
+          data.impact_summary = sentences;
         }
 
         setProfileData(data);
@@ -359,9 +375,12 @@ export default function AutoResumePage() {
             // Add bullet point
             pdf.text("•", margin, yPosition);
 
+            // Remove markdown link formatting for PDF
+            const plainText = point.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+
             // Split text to fit within margins
             const splitText = pdf.splitTextToSize(
-              point,
+              plainText,
               pdfWidth - margin * 2 - 20
             );
             pdf.text(splitText, margin + 20, yPosition);
@@ -558,18 +577,22 @@ export default function AutoResumePage() {
                         after: 200,
                       },
                     }),
-                    ...(profileData.impact_summary || []).map(
-                      (point) =>
-                        new Paragraph({
-                          children: [
-                            new TextRun({ text: "• ", color: "0066CC" }),
-                            new TextRun({ text: point }),
-                          ],
-                          spacing: {
-                            after: 100,
-                          },
-                        })
-                    ),
+                    ...(profileData.impact_summary || []).map((point) => {
+                      // Remove markdown link formatting for DOCX
+                      const plainText = point.replace(
+                        /\[([^\]]+)\]\([^)]+\)/g,
+                        "$1"
+                      );
+                      return new Paragraph({
+                        children: [
+                          new TextRun({ text: "• ", color: "0066CC" }),
+                          new TextRun({ text: plainText }),
+                        ],
+                        spacing: {
+                          after: 100,
+                        },
+                      });
+                    }),
                     new Paragraph({
                       text: "",
                       spacing: {
@@ -835,6 +858,43 @@ export default function AutoResumePage() {
     });
   };
 
+  // Helper function to render markdown links
+  const renderTextWithLinks = (text: string) => {
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = linkRegex.exec(text)) !== null) {
+      // Add text before the link
+      if (match.index > lastIndex) {
+        parts.push(text.slice(lastIndex, match.index));
+      }
+
+      // Add the link
+      parts.push(
+        <a
+          key={match.index}
+          href={match[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:underline"
+        >
+          {match[1]}
+        </a>
+      );
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : text;
+  };
+
   //     case 'talk': return <Mic className="h-5 w-5 text-blue-500" />;
   //     default: return <LinkIcon className="h-5 w-5 text-gray-400" />;
   //   }
@@ -1088,7 +1148,9 @@ export default function AutoResumePage() {
                           <span className="text-blue-600 mt-1 flex-shrink-0">
                             •
                           </span>
-                          <span className="text-gray-700">{point}</span>
+                          <span className="text-gray-700">
+                            {renderTextWithLinks(point)}
+                          </span>
                         </li>
                       ))}
                     </ul>
