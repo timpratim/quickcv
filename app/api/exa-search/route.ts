@@ -40,9 +40,28 @@ function detectTypeFromUrl(url: string): ContentItem["type"] {
 
 function parseLinkedInExperience(text: string): JobEntry[] {
   const jobs: JobEntry[] = [];
-  const regex = /([A-Za-z0-9 ,.&()\/-]+) at ([A-Za-z0-9 ,.&()\/-]+)\s+(\w+ \d{4})\s*[\u2013\-]\s*(Present|\w+ \d{4})/gi;
+
+  // Normalize whitespace and dashes for easier pattern matching
+  const clean = text
+    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const months = "Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec";
+
+  // Common pattern: "Title at Company Jan 2020 - Present"
+  const pattern1 = new RegExp(
+    `([A-Za-z0-9 ,.&()\/-]+?) at ([A-Za-z0-9 ,.&()\/-]+?) ((?:${months}) ?\\d{4})\s*-\s*(Present|(?:${months}) ?\\d{4})`,
+    "gi"
+  );
+  // Alternate pattern: "Company - Title Jan 2020 - Dec 2022"
+  const pattern2 = new RegExp(
+    `([A-Za-z0-9 ,.&()\/-]+?) - ([A-Za-z0-9 ,.&()\/-]+?) ((?:${months}) ?\\d{4})\s*-\s*(Present|(?:${months}) ?\\d{4})`,
+    "gi"
+  );
+
   let match: RegExpExecArray | null;
-  while ((match = regex.exec(text))) {
+  while ((match = pattern1.exec(clean))) {
     jobs.push({
       id: randomUUID(),
       title: match[1].trim(),
@@ -51,11 +70,46 @@ function parseLinkedInExperience(text: string): JobEntry[] {
       endDate: match[4].trim(),
     });
   }
+
+  while ((match = pattern2.exec(clean))) {
+    jobs.push({
+      id: randomUUID(),
+      title: match[2].trim(),
+      company: match[1].trim(),
+      startDate: match[3].trim(),
+      endDate: match[4].trim(),
+    });
+  }
+
+  // Fallback: detect sequential lines "Company", "Title", "Jan 2020 - Mar 2023"
+  if (jobs.length === 0) {
+    const linePattern = new RegExp(
+      `(${months}) ?\\d{4}\\s*-\\s*(Present|(?:${months}) ?\\d{4})`,
+      "i"
+    );
+    const lines = clean.split(/\n+/);
+    for (let i = 2; i < lines.length; i++) {
+      const dates = lines[i].match(linePattern);
+      if (dates) {
+        jobs.push({
+          id: randomUUID(),
+          title: lines[i - 1].trim(),
+          company: lines[i - 2].trim(),
+          startDate: dates[1] + " " + dates[0].split("-")[0].split(/\s+/)[1],
+          endDate: dates[2],
+        });
+      }
+    }
+  }
+
   return jobs;
 }
 
 async function fetchLinkedInJobs(url: string, token: string): Promise<JobEntry[]> {
   try {
+    if (url && !/^https?:\/\//i.test(url)) {
+      url = `https://${url.replace(/^\/*/, "")}`;
+    }
     const res = await fetch("https://api.exa.ai/webcrawl", {
       method: "POST",
       headers: {
