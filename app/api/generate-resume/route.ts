@@ -282,7 +282,8 @@ END`;
       model: "exa-research-pro",
       instructions: instructions,
       output: {
-        schema: researchOutputSchema as any, // Cast to any to bypass strict JSONSchema type issues
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        schema: researchOutputSchema as any, // Cast to bypass strict JSONSchema type issues
       },
     });
     console.log(`Exa task created, ID: ${task.id} for name: ${name}`);

@@ -100,6 +100,7 @@ export async function POST(req: Request) {
     }
 
     const data = await searchRes.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const items: ContentItem[] = (data.results || []).map((r: any) => ({
       id: r.id ?? r.url,
       title: r.title ?? "Untitled",
@@ -113,7 +114,7 @@ export async function POST(req: Request) {
     const jobs = await fetchLinkedInJobs(body.linkedin, token);
 
     return NextResponse.json({ items, jobs });
-  } catch (err) {
+  } catch {
     return NextResponse.json({ items: [], jobs: [], error: "Failed to fetch from Exa" }, { status: 500 });
   }
 }
