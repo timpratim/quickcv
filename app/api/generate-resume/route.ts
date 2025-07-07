@@ -193,7 +193,7 @@ const researchOutputSchema = {
 
 export async function POST(request: Request) {
   try {
-    const { name } = await request.json();
+    const { name, linkedinUrl, githubHandle, twitterHandle, personalWebsite } = await request.json();
 
     // Check for dummy data request
     if (name && typeof name === 'string' && name.trim().toLowerCase() === 'elon musk') {
@@ -205,8 +205,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Name is required and must be a non-empty string' }, { status: 400 });
     }
 
+    // Validate that at least one social media handle is provided
+    const hasAtLeastOneHandle = linkedinUrl?.trim() || githubHandle?.trim() || twitterHandle?.trim() || personalWebsite?.trim();
+    if (!hasAtLeastOneHandle) {
+      return NextResponse.json({ error: 'At least one social media handle or website is required to identify the exact person' }, { status: 400 });
+    }
+
+    // Build social media handles section for the prompt
+    const socialMediaHandles = [];
+    if (linkedinUrl?.trim()) socialMediaHandles.push(`LinkedIn: ${linkedinUrl.trim()}`);
+    if (githubHandle?.trim()) socialMediaHandles.push(`GitHub: ${githubHandle.trim()}`);
+    if (twitterHandle?.trim()) socialMediaHandles.push(`X/Twitter: ${twitterHandle.trim()}`);
+    if (personalWebsite?.trim()) socialMediaHandles.push(`Website: ${personalWebsite.trim()}`);
+
     const instructions = `Build a full public profile for ${name}. 
 Use only data that is public as of TODAY.
+
+PERSON IDENTIFICATION:
+The person you're researching can be identified by these social media handles:
+${socialMediaHandles.join('\n')}
+
+Use these specific handles to ensure you're researching the correct person. Focus your search on these verified accounts and their associated content.
 
 SCOPE – produce these eight sections, in order
 
@@ -237,12 +256,15 @@ SCOPE – produce these eight sections, in order
    • Include blogs, code, docs, demos, and talks that teach or advance these areas.
 
 METHOD
-• Search LinkedIn, GitHub, personal blogs, tech blogs, Dev.to, Hashnode, YouTube, X/Twitter, Meetup.com, Luma, conference sites, and news.
-• Prefer primary sources.
+• Start with the provided social media handles to identify the correct person
+• Search the specific LinkedIn profile, GitHub account, X/Twitter handle, and personal website provided
+• Cross-reference with other sources like tech blogs, Dev.to, Hashnode, YouTube, Meetup.com, Luma, and conference sites
+• Only include information that can be verified as belonging to the person identified by these handles
+• Prefer primary sources and the provided social media accounts
 • After each item in the tables, provide an inline citation URL in the 'source' field of the JSON object for that item.
 • Mark dates as “approx.” if unclear in the 'date_or_year' field.
 • Skip speculation and duplicates.
-• Get updated work history from LinkedIn.
+• Get updated work history from the provided LinkedIn profile.
 OUTPUT RULES
 • For each of the first eight sections, structure the output as an array of objects, where each object corresponds to a row in a table. Each object must have the fields: "date_or_year", "item", "details", and "source".
 • The 'item' field should contain the primary piece of information (e.g., Employer for work history, Title for blogs/videos, Repo name for projects).

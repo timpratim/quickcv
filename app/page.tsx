@@ -380,6 +380,10 @@ const SectionDisplay: React.FC<{
 
 export default function AutoResumePage() {
   const [name, setName] = useState("");
+  const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [githubHandle, setGithubHandle] = useState("");
+  const [twitterHandle, setTwitterHandle] = useState("");
+  const [personalWebsite, setPersonalWebsite] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false); // Added state for PDF download
   const [isDownloadingDocx, setIsDownloadingDocx] = useState(false); // Added state for DOCX download
@@ -401,6 +405,13 @@ export default function AutoResumePage() {
       return;
     }
 
+    // Validate that at least one social media handle is provided
+    const hasAtLeastOneHandle = linkedinUrl.trim() || githubHandle.trim() || twitterHandle.trim() || personalWebsite.trim();
+    if (!hasAtLeastOneHandle) {
+      setError("Please provide at least one social media handle or website to identify the exact person.");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     // setContentItems([]); // Old state update
@@ -410,7 +421,13 @@ export default function AutoResumePage() {
       const res = await fetch("/api/generate-resume", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ 
+          name,
+          linkedinUrl: linkedinUrl.trim(),
+          githubHandle: githubHandle.trim(),
+          twitterHandle: twitterHandle.trim(),
+          personalWebsite: personalWebsite.trim()
+        }),
       });
 
       if (res.ok) {
@@ -1071,35 +1088,120 @@ export default function AutoResumePage() {
           <CardHeader>
             <CardTitle>Generate a Professional Profile</CardTitle>
             <CardDescription>
-              Enter a full name to find their public work and projects.
+              Enter a full name and social media handles to find their exact public work and projects.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-grow">
-                <Label htmlFor="name" className="sr-only">
-                  Full Name
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="name" className="text-sm font-medium">
+                  Full Name *
                 </Label>
                 {isClient ? (
                   <Input
                     id="name"
                     type="text"
-                    placeholder="e.g., 'Will Bryk'"
+                    placeholder="e.g., John Smith"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     disabled={isLoading}
-                    className="text-base"
+                    className="text-base mt-1"
                   />
                 ) : (
-                  <div className="h-10 bg-gray-100 border border-gray-300 rounded-md flex items-center px-3 text-gray-500">
-                    e.g., &apos;Will Bryk&apos;
+                  <div className="h-10 bg-gray-100 border border-gray-300 rounded-md flex items-center px-3 text-gray-500 mt-1">
+                    e.g., John Smith
                   </div>
                 )}
               </div>
+
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">
+                  Social Media Handles <span className="text-red-500">* (at least one required)</span>
+                </Label>
+                
+                <div>
+                  <Label htmlFor="linkedin" className="text-xs text-gray-600">LinkedIn Profile URL</Label>
+                  {isClient ? (
+                    <Input
+                      id="linkedin"
+                      value={linkedinUrl}
+                      onChange={(e) => setLinkedinUrl(e.target.value)}
+                      placeholder="https://linkedin.com/in/username"
+                      disabled={isLoading}
+                      className="text-sm mt-1"
+                    />
+                  ) : (
+                    <div className="h-9 bg-gray-100 border border-gray-300 rounded-md flex items-center px-3 text-gray-500 text-sm mt-1">
+                      https://linkedin.com/in/username
+                    </div>
+                  )}
+                </div>
+                
+                <div>
+                  <Label htmlFor="github" className="text-xs text-gray-600">GitHub Username</Label>
+                  {isClient ? (
+                    <Input
+                      id="github"
+                      value={githubHandle}
+                      onChange={(e) => setGithubHandle(e.target.value)}
+                      placeholder="github-username"
+                      disabled={isLoading}
+                      className="text-sm mt-1"
+                    />
+                  ) : (
+                    <div className="h-9 bg-gray-100 border border-gray-300 rounded-md flex items-center px-3 text-gray-500 text-sm mt-1">
+                      github-username
+                    </div>
+                  )}
+                </div>
+                
+                <div>
+                  <Label htmlFor="twitter" className="text-xs text-gray-600">X/Twitter Handle</Label>
+                  {isClient ? (
+                    <Input
+                      id="twitter"
+                      value={twitterHandle}
+                      onChange={(e) => setTwitterHandle(e.target.value)}
+                      placeholder="@username"
+                      disabled={isLoading}
+                      className="text-sm mt-1"
+                    />
+                  ) : (
+                    <div className="h-9 bg-gray-100 border border-gray-300 rounded-md flex items-center px-3 text-gray-500 text-sm mt-1">
+                      @username
+                    </div>
+                  )}
+                </div>
+                
+                <div>
+                  <Label htmlFor="website" className="text-xs text-gray-600">Personal Website</Label>
+                  {isClient ? (
+                    <Input
+                      id="website"
+                      value={personalWebsite}
+                      onChange={(e) => setPersonalWebsite(e.target.value)}
+                      placeholder="https://yourwebsite.com"
+                      disabled={isLoading}
+                      className="text-sm mt-1"
+                    />
+                  ) : (
+                    <div className="h-9 bg-gray-100 border border-gray-300 rounded-md flex items-center px-3 text-gray-500 text-sm mt-1">
+                      https://yourwebsite.com
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {error && (
+                <div className="text-red-500 text-sm bg-red-50 p-3 rounded-md border border-red-200">
+                  {error}
+                </div>
+              )}
+
               <Button
                 onClick={handleGenerate}
                 disabled={isLoading}
-                className="sm:w-auto w-full"
+                className="w-full"
               >
                 {isLoading ? (
                   <>
@@ -1127,12 +1229,11 @@ export default function AutoResumePage() {
                   </>
                 ) : (
                   <>
-                    <Search className="h-5 w-5 mr-2" /> Find Content
+                    <Search className="h-5 w-5 mr-2" /> Generate Profile
                   </>
                 )}
               </Button>
             </div>
-            {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
           </CardContent>
         </Card>
 
